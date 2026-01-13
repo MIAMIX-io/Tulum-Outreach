@@ -1,0 +1,3 @@
+Jinja2
+requests
+# We need 'io' and 'csv' which are built-in, but this keeps the list clean.
