@@ -1,0 +1,67 @@
+name: Send receipt
+
+on:
+
+repository_dispatch:
+
+types: [send-receipt]
+
+jobs:
+
+send:
+
+runs-on: ubuntu-latest
+
+steps:
+
+- name: Extract payload
+    
+    id: p
+    
+    run: |
+    
+    TO_EMAIL=$(jq -r '.client_[payload.to](http://payload.to) // empty' $GITHUB_EVENT_PATH)
+    
+    SUBJECT=$(jq -r '.client_payload.subject // empty' $GITHUB_EVENT_PATH)
+    
+    HTML=$(jq -r '.client_payload.html // empty' $GITHUB_EVENT_PATH)
+    
+    [ -z "$TO_EMAIL" ] && { echo "Missing client_[payload.to](http://payload.to)"; exit 1; }
+    
+    [ -z "$SUBJECT" ] && { echo "Missing client_payload.subject"; exit 1; }
+    
+    [ -z "$HTML" ] && { echo "Missing client_payload.html"; exit 1; }
+    
+    echo "to=$TO_EMAIL" >> $GITHUB_OUTPUT
+    
+    echo "subject=$SUBJECT" >> $GITHUB_OUTPUT
+    
+    echo "html<<EOF" >> $GITHUB_OUTPUT
+    
+    echo "$HTML" >> $GITHUB_OUTPUT
+    
+    echo "EOF" >> $GITHUB_OUTPUT
+    
+- name: Send email via Gmail SMTP
+    
+    uses: dawidd6/action-send-mail@v3
+    
+    with:
+    
+    server_address: [smtp.gmail.com](http://smtp.gmail.com)
+    
+    server_port: 587
+    
+    secure: false
+    
+    username: $ secrets.SMTP_USERNAME         # your authenticated Gmail/Workspace user
+    
+    password: $ secrets.SMTP_APP_PASSWORD     # its App Password
+    
+    from: "MIAMIX Finance <[no-reply@miamix.io](mailto:no-reply@miamix.io)>"   # preferred sender
+    
+    to: $ [steps.p.outputs.to](http://steps.p.outputs.to)
+    
+    subject: $ steps.p.outputs.subject
+    
+    html_body: $ steps.p.outputs.html
