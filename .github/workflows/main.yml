@@ -1,0 +1,59 @@
+name: MIAMIX Email Newsletter Automation
+
+on:
+  # 1. External Trigger (e.g., from Google Apps Script)
+  repository_dispatch:
+    types: [trigger_email_send]
+
+  # 2. Automated Trigger (Only 'push' remains, 'schedule' is removed)
+  push:
+    branches:
+      - main
+  
+  # 3. Manual Trigger (for testing specific files)
+  workflow_dispatch:
+    inputs:
+      test_file_name:
+        description: 'Optional: Content file name (e.g., travel_content.html) for a test run.'
+        required: false
+        default: ''
+
+jobs:
+  send_email:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python 3.x
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests Jinja2
+          
+      - name: Run Email Sender Script
+        run: |
+          # CORRECTED: Using the name 'automation_script.py'
+          PYTHON_SCRIPT=automation_script.py 
+          
+          # Capture the input variable from the manual run, if provided
+          TEST_FILE="${{ github.event.inputs.test_file_name }}"
+          
+          if [ -n "$TEST_FILE" ]; then
+            # Runs Test Mode: Passes the file name as a command-line argument
+            echo "Running in TEST mode with file: $TEST_FILE"
+            python3 $PYTHON_SCRIPT "$TEST_FILE"
+          else
+            # Runs AUTOMATION mode: Relies on CSV status
+            echo "Running in AUTOMATION mode based on CSV status."
+            python3 $PYTHON_SCRIPT
+          fi
+        env:
+          # Your secrets are passed as environment variables to the script
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
