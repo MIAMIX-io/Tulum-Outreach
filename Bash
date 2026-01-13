@@ -1,0 +1,3 @@
+git add automation_script.py
+git commit -m "Fix: Removed erroneous self-reference causing NameError in Python script."
+git push
