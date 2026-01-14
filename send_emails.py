@@ -1,9 +1,7 @@
 import os
 import smtplib
 from email.message import EmailMessage
-
-# IMPORTANT: explicit import to avoid CI SDK bug
-from notion_client.client import Client
+from notion_client import Client
 
 
 def log(msg):
@@ -13,41 +11,27 @@ def log(msg):
 def main():
     log("--- SCRIPT INITIALIZING ---")
 
-    # Load secrets
+    # Load environment variables
     NOTION_TOKEN = os.environ.get("NOTION_TOKEN")
     DATABASE_ID = os.environ.get("NOTION_DATABASE_ID")
     EMAIL_USER = os.environ.get("EMAIL_USER")
     EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 
     if not all([NOTION_TOKEN, DATABASE_ID, EMAIL_USER, EMAIL_PASSWORD]):
-        log("❌ ERROR: One or more required environment variables are missing.")
+        log("❌ ERROR: Missing required environment variables.")
         return
 
-    # Init Notion client
+    # Initialize Notion client
     notion = Client(auth=NOTION_TOKEN)
 
-    # Safety check — fail loudly if SDK is wrong
-    if not hasattr(notion.databases, "query"):
-        raise RuntimeError(
-            f"Broken Notion SDK loaded: {type(notion.databases)}"
-        )
-
-    # 1. Query Notion
-    log(f"Searching for rows: Status=Ready to Send AND Send Email=Yes")
+    # Query Notion
+    log(f"Searching for 'Ready to Send' in Database {DATABASE_ID}...")
     try:
         response = notion.databases.query(
             database_id=DATABASE_ID,
             filter={
-                "and": [
-                    {
-                        "property": "Status",
-                        "select": {"equals": "Ready to Send"}
-                    },
-                    {
-                        "property": "Send Email",
-                        "select": {"equals": "Yes"}
-                    }
-                ]
+                "property": "Status",
+                "select": {"equals": "Ready to Send"}
             }
         )
         results = response.get("results", [])
@@ -56,12 +40,11 @@ def main():
         return
 
     log(f"Found {len(results)} rows ready for processing.")
-
     if not results:
         log("Stopping: No rows found.")
         return
 
-    # 2. SMTP setup
+    # SMTP setup
     log("Connecting to Gmail SMTP...")
     try:
         smtp = smtplib.SMTP_SSL("smtp.gmail.com", 465)
@@ -71,16 +54,16 @@ def main():
         log(f"❌ EMAIL LOGIN ERROR: {e}")
         return
 
-    # 3. Send emails
+    # Send emails
     for page in results:
         try:
             props = page["properties"]
 
-            # Contact name (safe)
+            # Contact (Title property)
             title = props["Contact"]["title"]
             contact_name = title[0]["plain_text"] if title else "there"
 
-            # Email (required)
+            # Email (Email property)
             email_addr = props["Email"].get("email")
             if not email_addr:
                 raise ValueError("Missing email address")
@@ -91,21 +74,17 @@ def main():
             msg["Subject"] = "GLOBALMIX launches in Tulum — Join the network"
             msg["From"] = EMAIL_USER
             msg["To"] = email_addr
-
-            # Plain-text fallback (HTML comes next step)
             msg.set_content(
                 f"Hi {contact_name},\n\n"
-                "GLOBALMIX is launching in Tulum.\n"
-                "We’re building a curated hospitality & brand network.\n\n"
-                "More details coming soon.\n\n"
-                "Best regards,\n"
-                "MIAMIX"
+                "We’re excited to introduce GLOBALMIX in Tulum.\n\n"
+                "Visit https://www.globalmix.online to learn more.\n\n"
+                "— MIAMIX"
             )
 
             smtp.send_message(msg)
             log(f"✅ Email sent to {email_addr}")
 
-            # 4. Update Notion status
+            # Update Notion status → Sent
             notion.pages.update(
                 page_id=page["id"],
                 properties={
