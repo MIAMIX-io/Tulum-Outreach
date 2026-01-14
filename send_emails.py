@@ -1,14 +1,24 @@
 import os
 import smtplib
+import requests
 from email.message import EmailMessage
 from email.utils import formataddr
-
-from notion_client import Client
 from jinja2 import Environment, FileSystemLoader
 
+NOTION_API = "https://api.notion.com/v1"
+NOTION_VERSION = "2022-06-28"
 
-def log(message):
-    print(message, flush=True)
+
+def log(msg):
+    print(msg, flush=True)
+
+
+def notion_headers(token):
+    return {
+        "Authorization": f"Bearer {token}",
+        "Notion-Version": NOTION_VERSION,
+        "Content-Type": "application/json",
+    }
 
 
 def main():
@@ -19,42 +29,44 @@ def main():
     EMAIL_USER = os.getenv("EMAIL_USER")
     EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
-    if not NOTION_TOKEN or not DATABASE_ID:
-        raise RuntimeError("Missing Notion configuration")
+    if not all([NOTION_TOKEN, DATABASE_ID, EMAIL_USER, EMAIL_PASSWORD]):
+        raise RuntimeError("❌ Missing required environment variables")
 
-    if not EMAIL_USER or not EMAIL_PASSWORD:
-        raise RuntimeError("Missing email credentials")
-
-    notion = Client(auth=NOTION_TOKEN)
-
+    # --- Query Notion (RAW API) ---
     log("🔍 Querying Notion database")
 
-    try:
-        response = notion.databases.query(
-            database_id=DATABASE_ID,
-            filter={
-                "and": [
-                    {
-                        "property": "Status",
-                        "status": {"equals": "Ready to Send"}
-                    },
-                    {
-                        "property": "Send Email",
-                        "select": {"equals": "Yes"}
-                    }
-                ]
-            }
-        )
-    except Exception as e:
-        log(f"❌ NOTION API ERROR: {e}")
-        return
+    query_payload = {
+        "filter": {
+            "and": [
+                {
+                    "property": "Status",
+                    "status": {"equals": "Ready to Send"}
+                },
+                {
+                    "property": "Send Email",
+                    "select": {"equals": "Yes"}
+                }
+            ]
+        }
+    }
 
-    pages = response.get("results", [])
-    log(f"📬 Found {len(pages)} records")
+    res = requests.post(
+        f"{NOTION_API}/databases/{DATABASE_ID}/query",
+        headers=notion_headers(NOTION_TOKEN),
+        json=query_payload,
+        timeout=30
+    )
+
+    if not res.ok:
+        raise RuntimeError(f"❌ Notion query failed: {res.text}")
+
+    pages = res.json().get("results", [])
+    log(f"📬 Found {len(pages)} contacts")
 
     if not pages:
         return
 
+    # --- Email setup ---
     log("🔐 Connecting to Gmail SMTP")
     smtp = smtplib.SMTP_SSL("smtp.gmail.com", 465)
     smtp.login(EMAIL_USER, EMAIL_PASSWORD)
@@ -62,7 +74,7 @@ def main():
     env = Environment(loader=FileSystemLoader("emails"))
     template = env.get_template("email_template.html")
 
-    with open("emails/OutreachTulum-20260113.html", "r", encoding="utf-8") as f:
+    with open("emails/OutreachTulum-20260113.html", encoding="utf-8") as f:
         outreach_html = f.read()
 
     for page in pages:
@@ -74,7 +86,7 @@ def main():
 
             email = props["Email"]["email"]
             if not email:
-                raise ValueError("Missing email address")
+                raise ValueError("Missing email")
 
             log(f"➡ Sending to {name} <{email}>")
 
@@ -92,26 +104,31 @@ def main():
             msg["To"] = email
             msg["Reply-To"] = "info@miamix.io"
 
-            msg.set_content(
-                f"Hi {name},\n\n"
-                "Please view this email in HTML format.\n\n"
-                "MIAMIX"
-            )
-
+            msg.set_content(f"Hi {name}, please view this email in HTML format.")
             msg.add_alternative(html, subtype="html")
-            smtp.send_message(msg)
 
+            smtp.send_message(msg)
             log("✅ Email sent")
 
-            notion.pages.update(
-                page_id=page["id"],
-                properties={
+            # --- Update Notion ---
+            update_payload = {
+                "properties": {
                     "Status": {"status": {"name": "Sent"}},
                     "Send Email": {"select": {"name": "No"}}
                 }
+            }
+
+            upd = requests.patch(
+                f"{NOTION_API}/pages/{page['id']}",
+                headers=notion_headers(NOTION_TOKEN),
+                json=update_payload,
+                timeout=30
             )
 
-            log("🔄 Notion updated")
+            if not upd.ok:
+                log(f"⚠ Notion update failed: {upd.text}")
+            else:
+                log("🔄 Notion updated")
 
         except Exception as e:
             log(f"❌ ROW ERROR: {e}")
