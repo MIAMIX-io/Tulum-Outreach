@@ -1,76 +1,85 @@
 import os
+import sys
 import smtplib
 from email.message import EmailMessage
 from notion_client import Client
 
+# Force every print to show up in GitHub Logs immediately
+def log(msg):
+    print(msg, flush=True)
+
 def main():
-    # 1. Setup Clients
+    log("--- SCRIPT STARTING ---")
+    
+    # Load Environment Variables
     token = os.environ.get("NOTION_TOKEN")
     db_id = os.environ.get("NOTION_DATABASE_ID")
+    email_user = os.environ.get("EMAIL_USER")
+    email_pass = os.environ.get("EMAIL_PASSWORD")
+
+    if not token:
+        log("❌ ERROR: NOTION_TOKEN (from AUTO_DISPATCHER secret) is empty!")
+        return
+
     notion = Client(auth=token)
 
-    print("Checking Notion for contacts...")
-
-    # 2. Query for 'Ready to Send'
+    # 1. Query Notion
+    log(f"Querying Notion Database: {db_id}...")
     try:
-        response = notion.databases.query(
+        results = notion.databases.query(
             database_id=db_id,
             filter={
                 "property": "Status",
                 "status": {"equals": "Ready to Send"}
             }
-        )
-        results = response.get("results", [])
+        ).get("results")
     except Exception as e:
-        print(f"Error querying Notion: {e}")
+        log(f"❌ NOTION ERROR: {e}")
         return
+
+    log(f"Found {len(results)} rows with 'Ready to Send' status.")
 
     if not results:
-        print("No contacts found with status 'Ready to Send'.")
+        log("Stopping: No contacts found. Verify your Notion status is exactly 'Ready to Send'.")
         return
 
-    print(f"Found {len(results)} contact(s). Connecting to email...")
-
-    # 3. Connect to Gmail
+    # 2. Setup Email
+    log("Connecting to Gmail...")
     try:
         smtp = smtplib.SMTP_SSL('smtp.gmail.com', 465)
-        smtp.login(os.environ["EMAIL_USER"], os.environ["EMAIL_PASSWORD"])
+        smtp.login(email_user, email_pass)
+        log("✅ Gmail Login Successful.")
     except Exception as e:
-        print(f"Gmail Login Failed: {e}")
+        log(f"❌ GMAIL ERROR: {e}")
         return
 
-    # 4. Process Each Contact
+    # 3. Send and Update
     for page in results:
         try:
-            # Matches your CSV: 'Contact' (Name) and 'Email'
-            contact_name = page["properties"]["Contact"]["title"][0]["plain_text"]
-            email_addr = page["properties"]["Email"]["email"]
-            page_id = page["id"]
-
-            print(f"Sending to {contact_name} ({email_addr})...")
+            name = page["properties"]["Contact"]["title"][0]["plain_text"]
+            email = page["properties"]["Email"]["email"]
+            log(f"Processing: {name} <{email}>")
 
             msg = EmailMessage()
             msg['Subject'] = "Tulum Project Follow-up"
-            msg['From'] = os.environ["EMAIL_USER"]
-            msg['To'] = email_addr
-            msg.set_content(f"Hi {contact_name},\n\nThis is an automated update regarding the Tulum Project.")
+            msg['From'] = email_user
+            msg['To'] = email
+            msg.set_content(f"Hi {name},\n\nAutomated message successful.")
             
             smtp.send_message(msg)
+            log(f"✅ Email sent to {name}")
 
-            # 5. Update Status to 'Sent'
             notion.pages.update(
-                page_id=page_id,
-                properties={
-                    "Status": {"status": {"name": "Sent"}}
-                }
+                page_id=page["id"],
+                properties={"Status": {"status": {"name": "Sent"}}}
             )
-            print(f"✅ Successfully sent and updated {contact_name}")
+            log(f"🔄 Notion status updated to 'Sent' for {name}")
 
         except Exception as e:
-            print(f"❌ Error processing {page_id}: {e}")
+            log(f"❌ Error on row: {e}")
 
     smtp.quit()
-    print("Workflow finished.")
+    log("--- SCRIPT FINISHED ---")
 
 if __name__ == "__main__":
     main()
