@@ -1,130 +1,162 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{{ newsletter_title }}</title>
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Hind+Mysuru:wght@400;700&family=Montserrat:wght@700;900&display=swap" rel="stylesheet">
-    
-    <style>
-      /* START: DYNAMIC STYLES BLOCK */
-      
-      body, .font-inter {
-          font-family: 'Hind Mysuru', sans-serif;
-          background-color: {{ background_color }}; /* Body background (for the frame) */
-      }
-      /* Headings and titles use Montserrat */
-      h1, h2, h3, h4 {
-          font-family: 'Montserrat', Arial, sans-serif;
-      }
-      
-      .newsletter-container {
-          max-width: 800px;
-          margin: 0 auto;
-          background-color: #FFFFFF; /* Main white content block */
-      }
-      /* Contrast Frame Color for Header/Footer */
-      .frame-accent {
-          background-color: #E8E8E8; 
-      }
-      
-      .brand-text { color: {{ brand_color }}; } 
-      .text-main { color: #000000; }
-      
-      /* Class for consistent horizontal padding (30px) */
-      .content-padding {
-          padding-left: 30px;
-          padding-right: 30px;
-      }
-      
-      /* Social icon styling */
-      .social-icons a {
-          margin: 0 10px; 
-          display: inline-block;
-      }
-      .social-icons img {
-          width: 36px; 
-          height: 36px;
-      }
-      /* END: DYNAMIC STYLES BLOCK */
-    </style>
-  </head>
-  <body class="font-inter" style="margin: 0;">
-    
-    <div class="newsletter-container" style="padding-top: 25px; padding-bottom: 25px; background-color: {{ background_color }};">
-    
-      <div style="background-color: #FFFFFF; max-width: 800px; margin: 0 auto;">
-      
-        <div class="frame-accent" style="background-color: #E8E8E8;">
-            
-            <header class="content-padding" style="padding-top: 35px; padding-bottom: 25px; text-align: center;">
-              
-              <div style="padding-bottom: 10px;">
-                <a href="https://www.miamix.io/" target="_blank" style="display: block; margin: 0 auto; width: auto;">
-                  <img
-                    src="https://images.squarespace-cdn.com/content/v1/68e29960411f943804f76b6c/09a65ccf-841d-4b11-a361-79936b1854fb/MIAMIX_Gold.png?format=1500w"
-                    alt="MIAMIX Logo"
-                    style="display: block; height: 80px; width: auto; margin: 0 auto;"
-                  />
-                </a>
-              </div>
-              
-              <div>
-                  <h1 class="text-3xl sm:text-4xl font-bold text-main tracking-tight" style="font-size: 28px; margin-top: 0;">
-                    {{ newsletter_title }}
-                  </h1>
-                  
-                  <p class="text-gray-500 mt-2" style="font-family: 'Montserrat', Arial, sans-serif; font-size: 28px; font-weight: bold; margin-top: 0px; color: #E136C4;">
-                    Hello, <span style="color: #E136C4;">{{ name }}</span>!
-                  </p>
-              </div>
-              
-              {% if custom_message %}
-              <div>
-                  <p class="text-xs font-semibold text-gray-700 mt-2" style="margin-top: 10px;">
-                      Note: {{ custom_message }}
-                  </p>
-              </div>
-              {% endif %}
-              
-            </header>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GLOBALMIX launches in Tulum — Join the network</title>
 
-        </div>
-        
-        <section class="mb-8 content-padding" style="padding-top: 30px; padding-bottom: 30px; border-bottom: 1px solid #E0E0DB; text-align: left;">
-          {{ email_content_from_file | safe }}
-        </section>
+  <!-- Google Fonts (used where supported) -->
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Hind+Mysuru:wght@400;500&display=swap" rel="stylesheet">
 
-        <div class="frame-accent" style="background-color: #E8E8E8; text-align: center;">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #F4F4F4;
+      font-family: 'Hind Mysuru', Arial, Helvetica, sans-serif;
+      color: #444444;
+    }
 
-            <footer class="content-padding text-xs text-gray-500 pt-6" style="font-size: 10px; color: #555555; padding-top: 30px; padding-bottom: 30px;">
-              
-              <p style="margin-bottom: 10px; font-size: 12px; color: #E136C4;">Stay connected with us:</p>
-              <div class="social-icons" style="margin-bottom: 15px;">
-                  <a href="https://www.linkedin.com/company/miamix-io/" aria-label="LinkedIn">
-                      <img src="https://images.squarespace-cdn.com/content/v1/68e29960411f943804f76b6c/716a0fbe-deb6-46fa-b091-c25d17e4e918/MIAMIX_SocialLogos-2+%281%29.png?format=300w" alt="LinkedIn" style="display: inline-block; width: 36px; height: 36px;">
-                  </a>
-                  <a href="https://www.youtube.com/@MIAMIXUS" aria-label="YouTube">
-                      <img src="https://images.squarespace-cdn.com/content/v1/68e29960411f943804f76b6c/bd8323c9-3e9e-4e71-8f86-a1756675c39a/MIAMIX_SocialLogos-3+%281%29.png?format=300w" alt="YouTube" style="display: inline-block; width: 36px; height: 36px;">
-                  </a>
-                  <a href="https://www.instagram.com/miamix.us/" aria-label="Instagram">
-                      <img src="https://images.squarespace-cdn.com/content/v1/68e29960411f943804f76b6c/6175a663-8fdb-488a-aa7f-1c5c98572511/MIAMIX_SocialLogos-1+%281%29.png?format=300w" alt="Instagram" style="display: inline-block; width: 36px; height: 36px;">
-                  </a>
-              </div>
-              
-              <p>MIAMIX LLC | Miami, FL 33133</p>
-              <p style="margin-top: 5px;">
-                &copy; 2025 MIAMIX. All Rights Reserved. |
-                <a href="www.miamix.io/unsubscribe" class="underline" style="text-decoration: underline; color: #000000;">Unsubscribe</a>
+    table {
+      border-collapse: collapse;
+    }
+
+    img {
+      max-width: 100%;
+      display: block;
+    }
+
+    h1, h2, h3 {
+      font-family: 'Montserrat', Arial, Helvetica, sans-serif;
+      color: #E136C4;
+      margin-top: 0;
+    }
+
+    p {
+      font-size: 16px;
+      line-height: 1.65;
+      margin: 0 0 18px 0;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: #FFFFFF;
+    }
+
+    .header {
+      background-color: #E8E8E8;
+      padding: 35px 30px 25px;
+      text-align: center;
+    }
+
+    .content {
+      padding: 30px;
+    }
+
+    .footer {
+      background-color: #E8E8E8;
+      padding: 30px;
+      text-align: center;
+      font-size: 12px;
+      color: #555555;
+    }
+
+    .btn {
+      display: inline-block;
+      background-color: #E136C4;
+      color: #FFFFFF !important;
+      text-decoration: none;
+      padding: 14px 30px;
+      border-radius: 8px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+    }
+
+    .divider {
+      border-top: 1px solid #E0E0DB;
+      margin: 40px 0;
+    }
+
+    .card {
+      border: 1px solid #E0E0DB;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .price {
+      font-weight: bold;
+      color: #EA7A0B;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+      <td align="center">
+
+        <table class="container" width="100%" cellpadding="0" cellspacing="0">
+
+          <!-- HEADER -->
+          <tr>
+            <td class="header">
+              <a href="https://www.miamix.io/" target="_blank">
+                <img src="https://images.squarespace-cdn.com/content/v1/68e29960411f943804f76b6c/09a65ccf-841d-4b11-a361-79936b1854fb/MIAMIX_Gold.png?format=1500w"
+                  alt="MIAMIX Logo"
+                  height="80"
+                  style="margin: 0 auto 15px;" />
+              </a>
+
+              <h1 style="font-size: 28px;">
+                GLOBALMIX launches in Tulum
+              </h1>
+
+              <p style="font-family: 'Montserrat', Arial, sans-serif; font-size: 22px; font-weight: 700; color: #E136C4;">
+                Hello, {{ name }}
               </p>
-            </footer>
-            
-        </div>
-        
-      </div>
-      </div>
-  </body>
+            </td>
+          </tr>
+
+          <!-- CONTENT -->
+          <tr>
+            <td class="content">
+
+              {{ email_content_from_file | safe }}
+
+            </td>
+          </tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td class="footer">
+              <p style="color:#E136C4;font-weight:600;">Stay connected with us</p>
+
+              <p>
+                <a href="https://www.linkedin.com/company/miamix-io/">LinkedIn</a> ·
+                <a href="https://www.instagram.com/miamix.us/">Instagram</a> ·
+                <a href="https://www.youtube.com/@MIAMIXUS">YouTube</a>
+              </p>
+
+              <p style="margin-top: 10px;">
+                MIAMIX LLC · Miami, FL 33133<br>
+                © 2025 MIAMIX. All rights reserved.
+              </p>
+
+              <p>
+                <a href="https://www.miamix.io/unsubscribe" style="text-decoration: underline; color:#000;">
+                  Unsubscribe
+                </a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+</body>
 </html>
