@@ -1,122 +1,161 @@
 import os
 import smtplib
 from email.message import EmailMessage
+from email.utils import formataddr
 from notion_client import Client
+from jinja2 import Environment, FileSystemLoader
 
 
+# -----------------------------
+# Logging helper
+# -----------------------------
 def log(msg):
     print(msg, flush=True)
 
 
+# -----------------------------
+# Main
+# -----------------------------
 def main():
-    log("--- SCRIPT INITIALIZING ---")
+    log("🚀 SCRIPT INITIALIZING")
 
-    # Environment variables
-    NOTION_TOKEN = os.environ.get("NOTION_TOKEN")
-    DATABASE_ID = os.environ.get("NOTION_DATABASE_ID")
-    EMAIL_USER = os.environ.get("EMAIL_USER")
-    EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
+    # -----------------------------
+    # Load environment variables
+    # -----------------------------
+    NOTION_TOKEN = os.getenv("NOTION_TOKEN")
+    DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
+    EMAIL_USER = os.getenv("EMAIL_USER")
+    EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
     if not all([NOTION_TOKEN, DATABASE_ID, EMAIL_USER, EMAIL_PASSWORD]):
-        log("❌ ERROR: Missing required environment variables.")
-        return
+        raise RuntimeError("❌ Missing required environment variables")
 
-    # Initialize Notion client
+    # -----------------------------
+    # Init Notion client
+    # -----------------------------
     notion = Client(auth=NOTION_TOKEN)
 
-    # Query Notion with STATUS + SEND EMAIL gate
-    log("Querying Notion for contacts ready to send...")
+    # Explicit SDK sanity check
+    if not callable(getattr(notion.databases, "query", None)):
+        raise RuntimeError("❌ Broken Notion SDK detected")
+
+    # -----------------------------
+    # Query Notion (Send Email = Yes)
+    # -----------------------------
+    log("🔍 Querying Notion database...")
+
     try:
         response = notion.databases.query(
             database_id=DATABASE_ID,
             filter={
-                "and": [
-                    {
-                        "property": "Status",
-                        "status": {"equals": "Ready to Send"}
-                    },
-                    {
-                        "property": "Send Email",
-                        "select": {"equals": "Yes"}
-                    }
-                ]
+                "property": "Send Email",
+                "select": {"equals": "Yes"}
             }
         )
-        results = response.get("results", [])
     except Exception as e:
-        log(f"❌ NOTION API ERROR: {e}")
+        raise RuntimeError(f"❌ NOTION API ERROR: {e}")
+
+    pages = response.get("results", [])
+    log(f"📄 Found {len(pages)} records ready to send")
+
+    if not pages:
+        log("✅ Nothing to send. Exiting.")
         return
 
-    log(f"Found {len(results)} contacts ready to email.")
+    # -----------------------------
+    # Load email templates
+    # -----------------------------
+    env = Environment(loader=FileSystemLoader("emails"))
 
-    if not results:
-        log("Stopping: No eligible rows found.")
-        return
+    base_template = env.get_template("email_template.html")
+    outreach_html = open(
+        "emails/OutreachTulum-20260113.html",
+        encoding="utf-8"
+    ).read()
 
-    # SMTP setup
-    log("Connecting to Gmail SMTP...")
+    # -----------------------------
+    # SMTP setup (Gmail)
+    # -----------------------------
+    log("📨 Connecting to Gmail SMTP...")
     try:
         smtp = smtplib.SMTP_SSL("smtp.gmail.com", 465)
         smtp.login(EMAIL_USER, EMAIL_PASSWORD)
-        log("✅ Gmail login successful.")
     except Exception as e:
-        log(f"❌ EMAIL LOGIN ERROR: {e}")
-        return
+        raise RuntimeError(f"❌ EMAIL LOGIN ERROR: {e}")
 
+    log("✅ SMTP connected")
+
+    # -----------------------------
     # Send emails
-    for page in results:
+    # -----------------------------
+    for page in pages:
+        page_id = page["id"]
+        props = page["properties"]
+
         try:
-            props = page["properties"]
+            # ---- Contact name (Title)
+            title_items = props["Contact"]["title"]
+            contact_name = (
+                title_items[0]["plain_text"]
+                if title_items else "there"
+            )
 
-            # Contact name (Title)
-            title = props["Contact"]["title"]
-            contact_name = title[0]["plain_text"] if title else "there"
-
-            # Email address
-            email_addr = props["Email"].get("email")
+            # ---- Email
+            email_addr = props["Email"]["email"]
             if not email_addr:
-                raise ValueError("Missing email address")
+                raise ValueError("Missing Email")
 
-            log(f"Sending email to {contact_name} <{email_addr}>")
+            log(f"➡️ Sending to {contact_name} <{email_addr}>")
 
-            # Email message
+            # ---- Render HTML
+            html_body = base_template.render(
+                newsletter_title="GLOBALMIX launches in Tulum — Join the network",
+                name=contact_name,
+                background_color="#F5F5F5",
+                brand_color="#E136C4",
+                email_content_from_file=outreach_html,
+                custom_message=None
+            )
+
+            # ---- Build email
             msg = EmailMessage()
             msg["Subject"] = "GLOBALMIX launches in Tulum — Join the network"
-            msg["From"] = EMAIL_USER
+            msg["From"] = formataddr(("MIAMIX", "no-reply@miamix.io"))
             msg["To"] = email_addr
+            msg["Reply-To"] = "info@miamix.io"
 
             msg.set_content(
                 f"Hi {contact_name},\n\n"
-                "GLOBALMIX has officially launched in Tulum.\n\n"
-                "Join the network here:\n"
-                "https://www.globalmix.online\n\n"
-                "— MIAMIX"
+                "Please view this email in HTML format.\n\n"
+                "MIAMIX"
             )
 
-            smtp.send_message(msg)
-            log(f"✅ Email sent to {email_addr}")
+            msg.add_alternative(html_body, subtype="html")
 
-            # Update Notion: Status → Sent, Send Email → No
+            # ---- Send
+            smtp.send_message(msg)
+            log(f"✅ Sent to {email_addr}")
+
+            # ---- Update Notion
             notion.pages.update(
-                page_id=page["id"],
+                page_id=page_id,
                 properties={
-                    "Status": {
-                        "status": {"name": "Sent"}
-                    },
-                    "Send Email": {
-                        "select": {"name": "No"}
-                    }
+                    "Send Email": {"select": {"name": "No"}},
+                    "Status": {"select": {"name": "Sent"}}
                 }
             )
 
-            log(f"🔄 Notion updated → Sent / Send Email = No ({contact_name})")
+            log(f"🔄 Notion updated for {contact_name}")
 
         except Exception as e:
-            log(f"❌ ROW ERROR ({page.get('id')}): {e}")
+            log(f"❌ ERROR ({page_id}): {e}")
 
     smtp.quit()
-    log("--- SCRIPT COMPLETE ---")
+    log("🎉 SCRIPT COMPLETE")
 
 
+# -----------------------------
+# Entry point
+# -----------------------------
 if __name__ == "__main__":
     main()
