@@ -11,7 +11,7 @@ def log(msg):
 def main():
     log("--- SCRIPT INITIALIZING ---")
 
-    # Load environment variables
+    # Environment variables
     NOTION_TOKEN = os.environ.get("NOTION_TOKEN")
     DATABASE_ID = os.environ.get("NOTION_DATABASE_ID")
     EMAIL_USER = os.environ.get("EMAIL_USER")
@@ -24,14 +24,22 @@ def main():
     # Initialize Notion client
     notion = Client(auth=NOTION_TOKEN)
 
-    # Query Notion
-    log(f"Searching for 'Ready to Send' in Database {DATABASE_ID}...")
+    # Query Notion with STATUS + SEND EMAIL gate
+    log("Querying Notion for contacts ready to send...")
     try:
         response = notion.databases.query(
             database_id=DATABASE_ID,
             filter={
-                "property": "Status",
-                "select": {"equals": "Ready to Send"}
+                "and": [
+                    {
+                        "property": "Status",
+                        "status": {"equals": "Ready to Send"}
+                    },
+                    {
+                        "property": "Send Email",
+                        "select": {"equals": "Yes"}
+                    }
+                ]
             }
         )
         results = response.get("results", [])
@@ -39,9 +47,10 @@ def main():
         log(f"❌ NOTION API ERROR: {e}")
         return
 
-    log(f"Found {len(results)} rows ready for processing.")
+    log(f"Found {len(results)} contacts ready to email.")
+
     if not results:
-        log("Stopping: No rows found.")
+        log("Stopping: No eligible rows found.")
         return
 
     # SMTP setup
@@ -59,41 +68,48 @@ def main():
         try:
             props = page["properties"]
 
-            # Contact (Title property)
+            # Contact name (Title)
             title = props["Contact"]["title"]
             contact_name = title[0]["plain_text"] if title else "there"
 
-            # Email (Email property)
+            # Email address
             email_addr = props["Email"].get("email")
             if not email_addr:
                 raise ValueError("Missing email address")
 
             log(f"Sending email to {contact_name} <{email_addr}>")
 
+            # Email message
             msg = EmailMessage()
             msg["Subject"] = "GLOBALMIX launches in Tulum — Join the network"
             msg["From"] = EMAIL_USER
             msg["To"] = email_addr
+
             msg.set_content(
                 f"Hi {contact_name},\n\n"
-                "We’re excited to introduce GLOBALMIX in Tulum.\n\n"
-                "Visit https://www.globalmix.online to learn more.\n\n"
+                "GLOBALMIX has officially launched in Tulum.\n\n"
+                "Join the network here:\n"
+                "https://www.globalmix.online\n\n"
                 "— MIAMIX"
             )
 
             smtp.send_message(msg)
             log(f"✅ Email sent to {email_addr}")
 
-            # Update Notion status → Sent
+            # Update Notion: Status → Sent, Send Email → No
             notion.pages.update(
                 page_id=page["id"],
                 properties={
                     "Status": {
-                        "select": {"name": "Sent"}
+                        "status": {"name": "Sent"}
+                    },
+                    "Send Email": {
+                        "select": {"name": "No"}
                     }
                 }
             )
-            log(f"🔄 Notion updated → Sent ({contact_name})")
+
+            log(f"🔄 Notion updated → Sent / Send Email = No ({contact_name})")
 
         except Exception as e:
             log(f"❌ ROW ERROR ({page.get('id')}): {e}")
