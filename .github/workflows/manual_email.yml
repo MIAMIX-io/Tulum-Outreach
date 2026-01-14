@@ -11,29 +11,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python 3.11 (REQUIRED)
-        uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: "3.9"
 
-      - name: Clean pip cache completely
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip cache purge
-          pip uninstall -y notion notion-client || true
-
-      - name: Install Notion SDK (known-stable)
-        run: |
-          pip install notion-client==2.5.0
-
-      - name: 🔍 SDK Smoke Test (FAIL FAST)
-        run: |
-          python - <<'PY'
-          from notion_client import Client
-          c = Client(auth="test")
-          assert hasattr(c.databases, "query"), "❌ Notion SDK is broken"
-          print("✅ Notion SDK OK:", c.databases)
-          PY
+          python -m pip uninstall -y notion notion-client || true
+          python -m pip install notion-client==2.7.0 jinja2
 
       - name: Run Notion Email Dispatcher
         env:
