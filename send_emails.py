@@ -6,22 +6,14 @@ from notion_client import Client
 from jinja2 import Environment, FileSystemLoader
 
 
-# -----------------------------
-# Logging helper
-# -----------------------------
 def log(msg):
     print(msg, flush=True)
 
 
-# -----------------------------
-# Main
-# -----------------------------
 def main():
     log("🚀 SCRIPT INITIALIZING")
 
-    # -----------------------------
-    # Load environment variables
-    # -----------------------------
+    # --- ENV ---
     NOTION_TOKEN = os.getenv("NOTION_TOKEN")
     DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
     EMAIL_USER = os.getenv("EMAIL_USER")
@@ -30,132 +22,90 @@ def main():
     if not all([NOTION_TOKEN, DATABASE_ID, EMAIL_USER, EMAIL_PASSWORD]):
         raise RuntimeError("❌ Missing required environment variables")
 
-    # -----------------------------
-    # Init Notion client
-    # -----------------------------
     notion = Client(auth=NOTION_TOKEN)
 
-    # Explicit SDK sanity check
-    if not callable(getattr(notion.databases, "query", None)):
-        raise RuntimeError("❌ Broken Notion SDK detected")
-
-    # -----------------------------
-    # Query Notion (Send Email = Yes)
-    # -----------------------------
+    # --- QUERY NOTION ---
     log("🔍 Querying Notion database...")
 
     try:
         response = notion.databases.query(
             database_id=DATABASE_ID,
             filter={
-                "property": "Send Email",
-                "select": {"equals": "Yes"}
+                "and": [
+                    {
+                        "property": "Status",
+                        "status": {"equals": "Ready to Send"}
+                    },
+                    {
+                        "property": "Send Email",
+                        "select": {"equals": "Yes"}
+                    }
+                ]
             }
         )
+        rows = response.get("results", [])
     except Exception as e:
-        raise RuntimeError(f"❌ NOTION API ERROR: {e}")
-
-    pages = response.get("results", [])
-    log(f"📄 Found {len(pages)} records ready to send")
-
-    if not pages:
-        log("✅ Nothing to send. Exiting.")
+        log(f"❌ NOTION API ERROR: {e}")
         return
 
-    # -----------------------------
-    # Load email templates
-    # -----------------------------
+    log(f"📬 Rows ready to send: {len(rows)}")
+    if not rows:
+        return
+
+    # --- SMTP ---
+    log("🔐 Connecting to Gmail SMTP...")
+    smtp = smtplib.SMTP_SSL("smtp.gmail.com", 465)
+    smtp.login(EMAIL_USER, EMAIL_PASSWORD)
+    log("✅ SMTP authenticated")
+
+    # --- TEMPLATE SETUP ---
     env = Environment(loader=FileSystemLoader("emails"))
+    wrapper = env.get_template("email_template.html")
+    outreach_html = open("emails/OutreachTulum-20260113.html", "r", encoding="utf-8").read()
 
-    base_template = env.get_template("email_template.html")
-    outreach_html = open(
-        "emails/OutreachTulum-20260113.html",
-        encoding="utf-8"
-    ).read()
-
-    # -----------------------------
-    # SMTP setup (Gmail)
-    # -----------------------------
-    log("📨 Connecting to Gmail SMTP...")
-    try:
-        smtp = smtplib.SMTP_SSL("smtp.gmail.com", 465)
-        smtp.login(EMAIL_USER, EMAIL_PASSWORD)
-    except Exception as e:
-        raise RuntimeError(f"❌ EMAIL LOGIN ERROR: {e}")
-
-    log("✅ SMTP connected")
-
-    # -----------------------------
-    # Send emails
-    # -----------------------------
-    for page in pages:
-        page_id = page["id"]
-        props = page["properties"]
-
+    # --- SEND LOOP ---
+    for page in rows:
         try:
-            # ---- Contact name (Title)
-            title_items = props["Contact"]["title"]
-            contact_name = (
-                title_items[0]["plain_text"]
-                if title_items else "there"
-            )
+            props = page["properties"]
 
-            # ---- Email
-            email_addr = props["Email"]["email"]
-            if not email_addr:
-                raise ValueError("Missing Email")
+            # Contact name
+            title = props["Contact"]["title"]
+            name = title[0]["plain_text"] if title else "there"
 
-            log(f"➡️ Sending to {contact_name} <{email_addr}>")
+            # Email
+            email = props["Email"]["email"]
+            if not email:
+                raise ValueError("Missing email")
 
-            # ---- Render HTML
-            html_body = base_template.render(
+            log(f"➡ Sending to {name} <{email}>")
+
+            html_body = wrapper.render(
                 newsletter_title="GLOBALMIX launches in Tulum — Join the network",
-                name=contact_name,
+                name=name,
                 background_color="#F5F5F5",
                 brand_color="#E136C4",
                 email_content_from_file=outreach_html,
-                custom_message=None
             )
 
-            # ---- Build email
             msg = EmailMessage()
             msg["Subject"] = "GLOBALMIX launches in Tulum — Join the network"
             msg["From"] = formataddr(("MIAMIX", "no-reply@miamix.io"))
-            msg["To"] = email_addr
+            msg["To"] = email
             msg["Reply-To"] = "info@miamix.io"
 
             msg.set_content(
-                f"Hi {contact_name},\n\n"
-                "Please view this email in HTML format.\n\n"
+                f"Hi {name},\n\n"
+                "Please view this email in HTML.\n\n"
                 "MIAMIX"
             )
 
             msg.add_alternative(html_body, subtype="html")
 
-            # ---- Send
             smtp.send_message(msg)
-            log(f"✅ Sent to {email_addr}")
+            log("✅ Sent")
 
-            # ---- Update Notion
+            # --- UPDATE NOTION ---
             notion.pages.update(
-                page_id=page_id,
+                page_id=page["id"],
                 properties={
-                    "Send Email": {"select": {"name": "No"}},
-                    "Status": {"select": {"name": "Sent"}}
-                }
-            )
-
-            log(f"🔄 Notion updated for {contact_name}")
-
-        except Exception as e:
-            log(f"❌ ERROR ({page_id}): {e}")
-
-    smtp.quit()
-    log("🎉 SCRIPT COMPLETE")
-
-
-# -----------------------------
-# Entry point
-# -----------------------------
-if __name__ == "__main__":
-    main()
+                    "St
