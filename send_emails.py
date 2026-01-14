@@ -7,9 +7,19 @@ notion = Client(auth=os.environ["NOTION_TOKEN"])
 DATABASE_ID = os.environ["NOTION_DATABASE_ID"]
 
 def main():
-    print("Connecting to Notion...")
+    print("--- DEBUGGING START ---")
     
-    # This filter looks specifically for the name of the status
+    # 1. SUPER DEBUG: Let's see what is actually in the database
+    all_rows = notion.databases.query(database_id=DATABASE_ID, page_size=5).get("results")
+    print(f"Total rows checked for debug: {len(all_rows)}")
+    for i, row in enumerate(all_rows):
+        name = row["properties"]["Contact"]["title"][0]["plain_text"]
+        status_data = row["properties"]["Status"]["status"]
+        print(f"Row {i+1}: '{name}' has Status name: '{status_data['name']}'")
+    
+    print("--- FILTERED QUERY START ---")
+
+    # 2. The Actual Filtered Query
     try:
         results = notion.databases.query(
             database_id=DATABASE_ID,
@@ -21,58 +31,43 @@ def main():
             }
         ).get("results")
     except Exception as e:
-        print(f"Error: Database query failed. {e}")
+        print(f"API Error: {e}")
         return
 
-    print(f"Found {len(results)} contacts ready to email.")
+    print(f"Found {len(results)} rows matching 'Ready to Send'")
 
     if not results:
-        print("Check: Is the status name EXACTLY 'Ready to Send' (case sensitive)?")
+        print("Stopping: No matches found. Check the DEBUG list above for exact naming.")
         return
 
-    # Gmail Connection
+    # 3. Email Logic
     try:
         smtp = smtplib.SMTP_SSL('smtp.gmail.com', 465)
         smtp.login(os.environ["EMAIL_USER"], os.environ["EMAIL_PASSWORD"])
-    except Exception as e:
-        print(f"Gmail Login Error: {e}")
-        return
-
-    for page in results:
-        try:
-            # Using 'Contact' for name and 'Email' for address per your CSV
+        
+        for page in results:
             contact_name = page["properties"]["Contact"]["title"][0]["plain_text"]
             email_addr = page["properties"]["Email"]["email"]
             page_id = page["id"]
 
-            print(f"Sending to: {contact_name}...")
-
+            print(f"Sending email to {contact_name}...")
             msg = EmailMessage()
-            msg['Subject'] = "Tulum Project Follow-up"
+            msg['Subject'] = "Tulum Project Test"
             msg['From'] = os.environ["EMAIL_USER"]
             msg['To'] = email_addr
-            msg.set_content(f"Hi {contact_name},\n\nThis is the automated test for the Tulum Project.")
-            
+            msg.set_content(f"Hi {contact_name}, test successful.")
             smtp.send_message(msg)
-            
-            # Update status to 'Sent' (which you put in the 'Complete' group)
+
+            # Update to Sent
             notion.pages.update(
                 page_id=page_id,
-                properties={
-                    "Status": {
-                        "status": {
-                            "name": "Sent"
-                        }
-                    }
-                }
+                properties={"Status": {"status": {"name": "Sent"}}}
             )
-            print(f"Done: {contact_name} moved to Sent.")
-
-        except Exception as e:
-            print(f"Error processing a row: {e}")
-
-    smtp.quit()
-    print("Workflow complete.")
+            print(f"✅ Success: {contact_name} moved to Sent")
+        
+        smtp.quit()
+    except Exception as e:
+        print(f"Email/Update Error: {e}")
 
 if __name__ == "__main__":
     main()
