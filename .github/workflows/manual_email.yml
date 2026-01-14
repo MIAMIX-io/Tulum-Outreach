@@ -12,7 +12,7 @@ jobs:
       - run: pip install notion-client
       - name: Run Script
         env:
-          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_TOKEN: ${{ secrets.AUTO_DISPATCHER }} 
           NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
