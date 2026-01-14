@@ -7,8 +7,8 @@ from notion_client import Client
 from jinja2 import Environment, FileSystemLoader
 
 
-def log(msg):
-    print(msg, flush=True)
+def log(message):
+    print(message, flush=True)
 
 
 def main():
@@ -19,10 +19,10 @@ def main():
     EMAIL_USER = os.getenv("EMAIL_USER")
     EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
-    if NOTION_TOKEN is None or DATABASE_ID is None:
-        raise RuntimeError("Missing Notion environment variables")
+    if not NOTION_TOKEN or not DATABASE_ID:
+        raise RuntimeError("Missing Notion configuration")
 
-    if EMAIL_USER is None or EMAIL_PASSWORD is None:
+    if not EMAIL_USER or not EMAIL_PASSWORD:
         raise RuntimeError("Missing email credentials")
 
     notion = Client(auth=NOTION_TOKEN)
@@ -36,15 +36,11 @@ def main():
                 "and": [
                     {
                         "property": "Status",
-                        "status": {
-                            "equals": "Ready to Send"
-                        }
+                        "status": {"equals": "Ready to Send"}
                     },
                     {
                         "property": "Send Email",
-                        "select": {
-                            "equals": "Yes"
-                        }
+                        "select": {"equals": "Yes"}
                     }
                 ]
             }
@@ -56,7 +52,7 @@ def main():
     pages = response.get("results", [])
     log(f"📬 Found {len(pages)} records")
 
-    if len(pages) == 0:
+    if not pages:
         return
 
     log("🔐 Connecting to Gmail SMTP")
@@ -74,4 +70,55 @@ def main():
             props = page["properties"]
 
             title = props["Contact"]["title"]
-            name = title[0]["plain_text"] if title else "there_]()
+            name = title[0]["plain_text"] if title else "there"
+
+            email = props["Email"]["email"]
+            if not email:
+                raise ValueError("Missing email address")
+
+            log(f"➡ Sending to {name} <{email}>")
+
+            html = template.render(
+                newsletter_title="GLOBALMIX launches in Tulum — Join the network",
+                name=name,
+                background_color="#F5F5F5",
+                brand_color="#E136C4",
+                email_content_from_file=outreach_html
+            )
+
+            msg = EmailMessage()
+            msg["Subject"] = "GLOBALMIX launches in Tulum — Join the network"
+            msg["From"] = formataddr(("MIAMIX", "no-reply@miamix.io"))
+            msg["To"] = email
+            msg["Reply-To"] = "info@miamix.io"
+
+            msg.set_content(
+                f"Hi {name},\n\n"
+                "Please view this email in HTML format.\n\n"
+                "MIAMIX"
+            )
+
+            msg.add_alternative(html, subtype="html")
+            smtp.send_message(msg)
+
+            log("✅ Email sent")
+
+            notion.pages.update(
+                page_id=page["id"],
+                properties={
+                    "Status": {"status": {"name": "Sent"}},
+                    "Send Email": {"select": {"name": "No"}}
+                }
+            )
+
+            log("🔄 Notion updated")
+
+        except Exception as e:
+            log(f"❌ ROW ERROR: {e}")
+
+    smtp.quit()
+    log("🏁 SCRIPT COMPLETE")
+
+
+if __name__ == "__main__":
+    main()
