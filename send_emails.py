@@ -33,13 +33,21 @@ def main():
         )
 
     # 1. Query Notion
-    log(f"Searching for 'Ready to Send' in Database {DATABASE_ID}...")
+    log(f"Searching for rows: Status=Ready to Send AND Send Email=Yes")
     try:
         response = notion.databases.query(
             database_id=DATABASE_ID,
             filter={
-                "property": "Status",
-                "select": {"equals": "Ready to Send"}
+                "and": [
+                    {
+                        "property": "Status",
+                        "select": {"equals": "Ready to Send"}
+                    },
+                    {
+                        "property": "Send Email",
+                        "select": {"equals": "Yes"}
+                    }
+                ]
             }
         )
         results = response.get("results", [])
@@ -80,12 +88,16 @@ def main():
             log(f"Sending email to {contact_name} <{email_addr}>")
 
             msg = EmailMessage()
-            msg["Subject"] = "Tulum Project Update"
+            msg["Subject"] = "GLOBALMIX launches in Tulum — Join the network"
             msg["From"] = EMAIL_USER
             msg["To"] = email_addr
+
+            # Plain-text fallback (HTML comes next step)
             msg.set_content(
                 f"Hi {contact_name},\n\n"
-                "This is a successful automation test.\n\n"
+                "GLOBALMIX is launching in Tulum.\n"
+                "We’re building a curated hospitality & brand network.\n\n"
+                "More details coming soon.\n\n"
                 "Best regards,\n"
                 "MIAMIX"
             )
