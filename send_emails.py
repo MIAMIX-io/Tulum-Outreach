@@ -1,83 +1,76 @@
 import os
+import smtplib
+from email.message import EmailMessage
 from notion_client import Client
 
-# Force immediate output to GitHub logs
-def log(msg):
-    print(msg, flush=True)
-
 def main():
-    log("--- STARTING DIAGNOSTIC RUN ---")
-    
+    # 1. Setup Clients
     token = os.environ.get("NOTION_TOKEN")
     db_id = os.environ.get("NOTION_DATABASE_ID")
-
-    if not token:
-        log("❌ ERROR: NOTION_TOKEN is missing.")
-        return
-    if not db_id:
-        log("❌ ERROR: NOTION_DATABASE_ID is missing.")
-        return
-
     notion = Client(auth=token)
 
-    # 1. TEST CONNECTION & PULL RAW DATA
-    log(f"Testing connection to Database: {db_id}")
+    print("Checking Notion for contacts...")
+
+    # 2. Query for 'Ready to Send'
     try:
-        # Use the specific syntax for the latest notion-client
-        response = notion.databases.query(database_id=db_id)
+        response = notion.databases.query(
+            database_id=db_id,
+            filter={
+                "property": "Status",
+                "status": {"equals": "Ready to Send"}
+            }
+        )
         results = response.get("results", [])
-        log(f"✅ CONNECTION SUCCESS! Found {len(results)} total rows in the database.")
     except Exception as e:
-        log(f"❌ CONNECTION FAILED: {e}")
-        log("Check: Is the 'Auto Dispatcher' invited to this specific Notion page?")
+        print(f"Error querying Notion: {e}")
         return
 
-    # 2. ANALYZE FIRST 3 ROWS (The "Super Debug")
-    log("--- ANALYZING FIRST 3 ROWS ---")
-    for i, page in enumerate(results[:3]):
-        try:
-            # Extract Contact Name
-            contact_name = "Unknown"
-            title_prop = page["properties"].get("Contact", {}).get("title", [])
-            if title_prop:
-                contact_name = title_prop[0]["plain_text"]
+    if not results:
+        print("No contacts found with status 'Ready to Send'.")
+        return
 
-            # Extract Status Info
-            status_obj = page["properties"].get("Status", {})
-            status_type = status_obj.get("type", "unknown")
-            
-            # This is the gold: what is the actual name of the status?
-            actual_name = "N/A"
-            if status_type == "status":
-                actual_name = status_obj.get("status", {}).get("name")
-            elif status_type == "select":
-                actual_name = status_obj.get("select", {}).get("name")
+    print(f"Found {len(results)} contact(s). Connecting to email...")
 
-            log(f"Row {i+1}: '{contact_name}' | Type: {status_type} | Current Value: '{actual_name}'")
-        except Exception as e:
-            log(f"Could not read row {i+1}: {e}")
+    # 3. Connect to Gmail
+    try:
+        smtp = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+        smtp.login(os.environ["EMAIL_USER"], os.environ["EMAIL_PASSWORD"])
+    except Exception as e:
+        print(f"Gmail Login Failed: {e}")
+        return
 
-    # 3. TRY THE SPECIFIC FILTER
-    log("--- TESTING TRIGGER FILTER ---")
-    log("Searching for: Status == 'Ready to Send'")
-    
-    # We will search manually through the results to avoid API filter syntax errors
-    matches = 0
+    # 4. Process Each Contact
     for page in results:
-        status_obj = page["properties"].get("Status", {})
-        current_val = ""
-        if status_obj.get("type") == "status":
-            current_val = status_obj.get("status", {}).get("name")
-        
-        if current_val == "Ready to Send":
-            matches += 1
-            name = page["properties"]["Contact"]["title"][0]["plain_text"]
-            log(f"🎯 MATCH FOUND: {name}")
+        try:
+            # Matches your CSV: 'Contact' (Name) and 'Email'
+            contact_name = page["properties"]["Contact"]["title"][0]["plain_text"]
+            email_addr = page["properties"]["Email"]["email"]
+            page_id = page["id"]
 
-    if matches == 0:
-        log("❌ No rows matched 'Ready to Send'. Double check spelling/capitalization.")
-    else:
-        log(f"✅ Found {matches} rows ready for email code.")
+            print(f"Sending to {contact_name} ({email_addr})...")
+
+            msg = EmailMessage()
+            msg['Subject'] = "Tulum Project Follow-up"
+            msg['From'] = os.environ["EMAIL_USER"]
+            msg['To'] = email_addr
+            msg.set_content(f"Hi {contact_name},\n\nThis is an automated update regarding the Tulum Project.")
+            
+            smtp.send_message(msg)
+
+            # 5. Update Status to 'Sent'
+            notion.pages.update(
+                page_id=page_id,
+                properties={
+                    "Status": {"status": {"name": "Sent"}}
+                }
+            )
+            print(f"✅ Successfully sent and updated {contact_name}")
+
+        except Exception as e:
+            print(f"❌ Error processing {page_id}: {e}")
+
+    smtp.quit()
+    print("Workflow finished.")
 
 if __name__ == "__main__":
     main()
